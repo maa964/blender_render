@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blender Render Pipeline</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        .file-input-button {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            transition: all 0.3s ease;
+        }
+        .file-input-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(79, 70, 229, 0.3);
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        
+        function App() {
+            const [settings, setSettings] = useState({
+                blendFile: '',
+                outputDir: '',
+                frameStart: 1,
+                frameEnd: 250,
+                resolutionX: 1920,
+                resolutionY: 1080,
+                samples: 128,
+                denoiseMethod: 'OIDN',
+                useCuda: true,
+                enableUpscale: false,
+                enableInterpolation: false,
+                codec: 'prores_ks',
+                framerate: 30
+            });
+            
+            const [status, setStatus] = useState({
+                step: 'idle',
+                progress: 0,
+                message: '準備完了'
+            });
+            
+            const [isRendering, setIsRendering] = useState(false);
+            
+            // ステータスを定期的に更新
+            useEffect(() => {
+                const interval = setInterval(async () => {
+                    try {
+                        const response = await fetch('/api/status');
+                        const data = await response.json();
+                        setStatus(data);
+                        setIsRendering(data.step !== 'idle' && data.step !== 'complete' && data.step !== 'error');
+                    } catch (error) {
+                        console.error('Status update failed:', error);
+                    }
+                }, 1000);
+                
+                return () => clearInterval(interval);
+            }, []);
+            
+            // Blendファイル選択
+            const handleSelectBlendFile = async () => {
+                try {
+                    const response = await fetch('/api/select-blend-file', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        setSettings({...settings, blendFile: data.path});
+                    } else {
+                        console.log('ファイル選択がキャンセルされました');
+                    }
+                } catch (error) {
+                    alert('ファイル選択に失敗しました: ' + error.message);
+                }
+            };
+            
+            // 出力フォルダ選択
+            const handleSelectOutputFolder = async () => {
+                try {
+                    const response = await fetch('/api/select-output-folder', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        setSettings({...settings, outputDir: data.path});
+                    } else {
+                        console.log('フォルダ選択がキャンセルされました');
+                    }
+                } catch (error) {
+                    alert('フォルダ選択に失敗しました: ' + error.message);
+                }
+            };
+            
+            const handleStartRender = async () => {
+                try {
+                    const response = await fetch('/api/start-render', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ settings })
+                    });
+                    
+                    if (!response.ok) {
+                        const error = await response.json();
+                        alert('エラー: ' + error.error);
+                    }
+                } catch (error) {
+                    alert('レンダリング開始に失敗しました: ' + error.message);
+                }
+            };
+            
+            const getStepName = (step) => {
+                const steps = {
+                    'idle': '待機中',
+                    'rendering': 'レンダリング',
+                    'denoising': 'ノイズ除去',
+                    'upscaling': 'アップスケール',
+                    'interpolating': 'フレーム補間',
+                    'encoding': '動画化',
+                    'complete': '完了',
+                    'error': 'エラー'
+                };
+                return steps[step] || step;
+            };
+            
+            const getFileName = (path) => {
+                if (!path) return '';
+                return path.split('\\').pop().split('/').pop();
+            };
+            
+            const getFolderName = (path) => {
+                if (!path) return '';
+                return path.split('\\').pop().split('/').pop();
+            };
+            
+            return (
+                <div className="container mx-auto p-6 max-w-6xl">
+                    <div className="text-center mb-8">
+                        <h1 className="text-4xl font-bold text-white mb-2">
+                            Blender Render Pipeline
+                        </h1>
+                        <p className="text-white opacity-80">
+                            プロフェッショナル3Dレンダリング with AI強化
+                        </p>
+                        <div className="mt-4 bg-white bg-opacity-20 rounded-lg p-3 inline-block">
+                            <p className="text-white text-sm">
+                                📁 Blender Path: C:\Program Files\Blender Foundation\Blender 4.5\blender.exe
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* 設定パネル */}
+                        <div className="lg:col-span-2">
+                            <div className="card p-6 mb-6">
+                                <h2 className="text-xl font-bold mb-4">📁 ファイル設定</h2>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2">Blendファイル</label>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={handleSelectBlendFile}
+                                                className="file-input-button text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 min-w-fit"
+                                            >
+                                                📂 ファイルを選択
+                                            </button>
+                                            <div className="flex-1 p-3 bg-gray-50 border rounded-lg flex items-center">
+                                                <span className="text-gray-600 text-sm">
+                                                    {settings.blendFile ? (
+                                                        <>
+                                                            <span className="font-medium text-green-600">✓ </span>
+                                                            {getFileName(settings.blendFile)}
+                                                        </>
+                                                    ) : (
+                                                        'Blendファイルが選択されていません'
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {settings.blendFile && (
+                                            <p className="text-xs text-gray-500 mt-1 break-all">
+                                                {settings.blendFile}
+                                            </p>
+                                        )}
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium mb-2">出力フォルダ</label>
+                                        <div className="flex gap-3">
+                                            <button
+                                                onClick={handleSelectOutputFolder}
+                                                className="file-input-button text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 min-w-fit"
+                                            >
+                                                📁 フォルダを選択
+                                            </button>
+                                            <div className="flex-1 p-3 bg-gray-50 border rounded-lg flex items-center">
+                                                <span className="text-gray-600 text-sm">
+                                                    {settings.outputDir ? (
+                                                        <>
+                                                            <span className="font-medium text-green-600">✓ </span>
+                                                            {getFolderName(settings.outputDir)}
+                                                        </>
+                                                    ) : (
+                                                        '出力フォルダが選択されていません'
+                                                    )}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {settings.outputDir && (
+                                            <p className="text-xs text-gray-500 mt-1 break-all">
+                                                {settings.outputDir}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="card p-6 mb-6">
+                                <h2 className="text-xl font-bold mb-4">⚙️ レンダリング設定</h2>
+                                
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">開始フレーム</label>
+                                            <input
+                                                type="number"
+                                                className="w-full p-2 border rounded-lg"
+                                                value={settings.frameStart}
+                                                onChange={(e) => setSettings({...settings, frameStart: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">終了フレーム</label>
+                                            <input
+                                                type="number"
+                                                className="w-full p-2 border rounded-lg"
+                                                value={settings.frameEnd}
+                                                onChange={(e) => setSettings({...settings, frameEnd: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">幅</label>
+                                            <input
+                                                type="number"
+                                                className="w-full p-2 border rounded-lg"
+                                                value={settings.resolutionX}
+                                                onChange={(e) => setSettings({...settings, resolutionX: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">高さ</label>
+                                            <input
+                                                type="number"
+                                                className="w-full p-2 border rounded-lg"
+                                                value={settings.resolutionY}
+                                                onChange={(e) => setSettings({...settings, resolutionY: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">サンプル数</label>
+                                        <input
+                                            type="number"
+                                            className="w-full p-2 border rounded-lg"
+                                            value={settings.samples}
+                                            onChange={(e) => setSettings({...settings, samples: parseInt(e.target.value)})}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="card p-6">
+                                <h2 className="text-xl font-bold mb-4">🤖 AI強化設定</h2>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">ノイズ除去方式</label>
+                                        <select
+                                            className="w-full p-2 border rounded-lg"
+                                            value={settings.denoiseMethod}
+                                            onChange={(e) => setSettings({...settings, denoiseMethod: e.target.value})}
+                                        >
+                                            <option value="OIDN">Intel Open Image Denoise</option>
+                                            <option value="FastDVDnet">FastDVDnet</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div className="space-y-3">
+                                        <div className="flex items-center space-x-3">
+                                            <input
+                                                type="checkbox"
+                                                id="cuda"
+                                                checked={settings.useCuda}
+                                                onChange={(e) => setSettings({...settings, useCuda: e.target.checked})}
+                                                className="w-4 h-4"
+                                            />
+                                            <label htmlFor="cuda" className="text-sm font-medium">⚡ CUDA加速を使用</label>
+                                        </div>
+                                        
+                                        <div className="flex items-center space-x-3">
+                                            <input
+                                                type="checkbox"
+                                                id="upscale"
+                                                checked={settings.enableUpscale}
+                                                onChange={(e) => setSettings({...settings, enableUpscale: e.target.checked})}
+                                                className="w-4 h-4"
+                                            />
+                                            <label htmlFor="upscale" className="text-sm font-medium">🔍 AIアップスケール</label>
+                                        </div>
+                                        
+                                        <div className="flex items-center space-x-3">
+                                            <input
+                                                type="checkbox"
+                                                id="interpolation"
+                                                checked={settings.enableInterpolation}
+                                                onChange={(e) => setSettings({...settings, enableInterpolation: e.target.checked})}
+                                                className="w-4 h-4"
+                                            />
+                                            <label htmlFor="interpolation" className="text-sm font-medium">🎬 フレーム補間</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        {/* ステータスパネル */}
+                        <div className="space-y-6">
+                            <div className="card p-6">
+                                <h2 className="text-xl font-bold mb-4">📊 レンダリング状態</h2>
+                                
+                                <div className="space-y-4">
+                                    <div>
+                                        <div className="flex justify-between text-sm mb-1">
+                                            <span>現在のステップ:</span>
+                                            <span className="font-medium">{getStepName(status.step)}</span>
+                                        </div>
+                                        
+                                        <div className="flex justify-between text-sm mb-2">
+                                            <span>進捗:</span>
+                                            <span>{Math.round(status.progress)}%</span>
+                                        </div>
+                                        
+                                        <div className="w-full bg-gray-200 rounded-full h-3">
+                                            <div 
+                                                className={`h-3 rounded-full transition-all duration-300 ${
+                                                    status.step === 'error' ? 'bg-red-500' :
+                                                    status.step === 'complete' ? 'bg-green-500' :
+                                                    'bg-blue-600'
+                                                }`}
+                                                style={{width: `${status.progress}%`}}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                                        {status.message}
+                                    </div>
+                                    
+                                    <button
+                                        onClick={handleStartRender}
+                                        disabled={isRendering || !settings.blendFile || !settings.outputDir}
+                                        className={`w-full py-3 px-4 rounded-lg font-medium transition-all ${
+                                            isRendering || !settings.blendFile || !settings.outputDir
+                                                ? 'bg-gray-400 cursor-not-allowed' 
+                                                : 'bg-green-600 hover:bg-green-700 text-white hover:shadow-lg'
+                                        }`}
+                                    >
+                                        {isRendering ? '🔄 レンダリング中...' : 
+                                         !settings.blendFile || !settings.outputDir ? '⚠️ ファイルを選択してください' :
+                                         '🚀 レンダリング開始'}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="card p-6">
+                                <h2 className="text-xl font-bold mb-4">👁️ プレビュー</h2>
+                                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
+                                    {status.preview_image ? (
+                                        <img 
+                                            src={status.preview_image || "/placeholder.svg"} 
+                                            alt="Preview" 
+                                            className="max-w-full max-h-full rounded-lg"
+                                        />
+                                    ) : (
+                                        <div className="text-gray-500 text-center">
+                                            <div className="text-4xl mb-2">🎬</div>
+                                            <p>プレビューはここに表示されます</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            
+                            <div className="card p-6">
+                                <h2 className="text-xl font-bold mb-4">ℹ️ 設定情報</h2>
+                                <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                        <span>総フレーム数:</span>
+                                        <span className="font-medium">{settings.frameEnd - settings.frameStart + 1}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>解像度:</span>
+                                        <span className="font-medium">{settings.resolutionX}×{settings.resolutionY}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span>CUDA:</span>
+                                        <span className={`font-medium ${settings.useCuda ? 'text-green-600' : 'text-gray-500'}`}>
+                                            {settings.useCuda ? '✓ 有効' : '✗ 無効'}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

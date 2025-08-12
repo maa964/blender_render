@@ -85,33 +85,41 @@ export default function BlenderRenderApp() {
   const [selectedCloudJob, setSelectedCloudJob] = useState<string | null>(null)
 
   const updateSetting = useCallback((key: keyof RenderSettings, value: any) => {
-    setSettings((prev) => ({ ...prev, [key]: value }))
+    const parsedValue = typeof value === 'number' ? value : Number.parseInt(value);
+    if (!isNaN(parsedValue)) {
+      setSettings((prev) => ({ ...prev, [key]: parsedValue }));
+    }
   }, [])
 
   const simulateProcessing = async () => {
-    const steps: { step: ProcessingStep; message: string; duration: number }[] = [
-      { step: "rendering", message: "Rendering frames with Blender...", duration: 3000 },
-      { step: "denoising", message: "Applying AI denoising...", duration: 2000 },
-      ...(settings.enableUpscale
-        ? [{ step: "upscaling" as ProcessingStep, message: "Upscaling with Real-ESRGAN...", duration: 2500 }]
-        : []),
-      ...(settings.enableInterpolation
-        ? [{ step: "interpolating" as ProcessingStep, message: "Frame interpolation with RIFE...", duration: 2000 }]
-        : []),
-      { step: "encoding", message: "Encoding final video...", duration: 1500 },
-      { step: "complete", message: "Rendering complete!", duration: 0 },
-    ]
+    try {
+      const steps: { step: ProcessingStep; message: string; duration: number }[] = [
+        { step: "rendering", message: "Rendering frames with Blender...", duration: 3000 },
+        { step: "denoising", message: "Applying AI denoising...", duration: 2000 },
+        ...(settings.enableUpscale
+          ? [{ step: "upscaling" as ProcessingStep, message: "Upscaling with Real-ESRGAN...", duration: 2500 }]
+          : []),
+        ...(settings.enableInterpolation
+          ? [{ step: "interpolating" as ProcessingStep, message: "Frame interpolation with RIFE...", duration: 2000 }]
+          : []),
+        { step: "encoding", message: "Encoding final video...", duration: 1500 },
+        { step: "complete", message: "Rendering complete!", duration: 0 },
+      ]
 
-    for (const { step, message, duration } of steps) {
-      setCurrentStep(step)
-      setStatusMessage(message)
+      for (const { step, message, duration } of steps) {
+        setCurrentStep(step)
+        setStatusMessage(message)
 
-      if (duration > 0) {
-        for (let i = 0; i <= 100; i += 2) {
-          setProgress(i)
-          await new Promise((resolve) => setTimeout(resolve, duration / 50))
+        if (duration > 0) {
+          for (let i = 0; i <= 100; i += 2) {
+            setProgress(i)
+            await new Promise((resolve) => setTimeout(resolve, duration / 50))
+          }
         }
       }
+    } catch (error) {
+      setCurrentStep("error")
+      setStatusMessage(`An error occurred: ${error}`)
     }
   }
 

@@ -1,17 +1,122 @@
 [project]
-name = "blender-render"
-version = "0.1.0"
-description = ""
+name = "blender-render-pipeline"
+version = "1.0.0"
+description = "高度なBlenderレンダリングパイプライン with AI強化機能"
 authors = [
-    {name = "Your Name",email = "you@example.com"}
+    {name = "Masahiro", email = "masahiro@example.com"}
 ]
+package-mode = false
 readme = "README.md"
-requires-python = "==3.11"
-dependencies = [
-    "bpy (>=4.5.1,<5.0.0)"
+requires-python = ">=3.8.1"
+license = "MIT"
+keywords = ["blender", "rendering", "ai", "cuda", "animation"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
+dependencies = [
+    "Pillow>=10.0.0",
+    "numpy>=1.21.0",
+    "numba>=0.58.0",
+    "opencv-python>=4.8.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "cupy-cuda12x>=12.0.0; platform_system!='Darwin'",
+    "psutil>=5.9.0",
+    "tqdm>=4.65.0",
+    "imageio>=2.31.0",
+    "scikit-image>=0.21.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+cython = [
+    "Cython>=3.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/masahiro/blender-render-pipeline"
+Documentation = "https://github.com/masahiro/blender-render-pipeline/wiki"
+Repository = "https://github.com/masahiro/blender-render-pipeline.git"
+"Bug Tracker" = "https://github.com/masahiro/blender-render-pipeline/issues"
+
+[project.scripts]
+blender-render = "main_gui:main"
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61.0", "wheel", "Cython>=3.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "processing*", "gui*", "utils*", "ai_tools*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short --strict-markers"
+markers = [
+    "slow: marks tests as slow",
+    "cuda: marks tests that require CUDA",
+    "integration: marks tests as integration tests",
+]

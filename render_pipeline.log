@@ -1,0 +1,46 @@
+2025-08-12 07:29:51,617 - __main__ - ERROR - アプリケーション起動エラー: name 'EnhancedBlenderRenderGUI' is not defined
+2025-08-12 23:13:07,954 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-12 23:13:12,753 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-12 23:13:12,753 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-12 23:13:13,602 - core.blender_engine - INFO - Blender検証完了
+2025-08-12 23:13:13,701 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-12 23:17:31,224 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-12 23:17:32,044 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-12 23:17:32,044 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-12 23:17:32,184 - core.blender_engine - INFO - Blender検証完了
+2025-08-12 23:17:32,242 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-12 23:25:53,398 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-12 23:25:54,270 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-12 23:25:54,271 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-12 23:25:54,455 - core.blender_engine - INFO - Blender検証完了
+2025-08-12 23:25:54,556 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-12 23:42:04,023 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-12 23:42:04,879 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-12 23:42:04,879 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-12 23:42:05,113 - core.blender_engine - INFO - Blender検証完了
+2025-08-12 23:42:06,186 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-12 23:43:14,029 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-12 23:43:14,784 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-12 23:43:14,784 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-12 23:43:14,926 - core.blender_engine - INFO - Blender検証完了
+2025-08-12 23:43:15,940 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-12 23:44:56,986 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-12 23:44:57,803 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-12 23:44:57,803 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-12 23:44:57,956 - core.blender_engine - INFO - Blender検証完了
+2025-08-12 23:44:59,064 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-13 00:16:11,353 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-13 00:16:12,030 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-13 00:16:12,031 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-13 00:16:12,186 - core.blender_engine - INFO - Blender検証完了
+2025-08-13 00:16:13,201 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-13 00:16:51,925 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-13 00:16:52,626 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-13 00:16:52,626 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-13 00:16:52,767 - core.blender_engine - INFO - Blender検証完了
+2025-08-13 00:16:53,779 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始
+2025-08-13 00:24:26,218 - core.cuda_accelerator - WARNING - PyTorch: CUDA未対応
+2025-08-13 00:24:26,945 - core.cuda_accelerator - INFO - CuPy CUDA検出: 1台のGPU
+2025-08-13 00:24:26,945 - __main__ - INFO - CUDA加速が利用可能です
+2025-08-13 00:24:27,086 - core.blender_engine - INFO - Blender検証完了
+2025-08-13 00:24:28,227 - __main__ - INFO - Enhanced Blender Render Pipeline GUI 開始

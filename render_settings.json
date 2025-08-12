@@ -1,0 +1,16 @@
+{
+  "blendFile": "C:/Users/masahiro/OneDrive/ドキュメント/Untitled.blend",
+  "outputDir": "C:/tmp",
+  "frameStart": 1,
+  "frameEnd": 10,
+  "resolutionX": 1280,
+  "resolutionY": 720,
+  "samples": 64,
+  "renderEngine": "CYCLES",
+  "renderDevice": "GPU",
+  "useCuda": 1,
+  "framerate": 15,
+  "enableUpscale": 1,
+  "enableInterpolation": 1,
+  "enableDenoise": 1
+}

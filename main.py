@@ -4,15 +4,26 @@ import threading
 import webbrowser
 import json
 import time
+import logging
 from glob import glob
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from PIL import Image
 import base64
 from io import BytesIO
+from tkinter import filedialog, Tk
 
-# ======= 既存のBlenderレンダリング関数 =======
-def blender_render(blender_path, blend_file, output_dir, frame_start, frame_end, res_x, res_y, samples, progress_callback=None):
+# Blenderパスを固定
+BLENDER_PATH = r"C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"
+
+# ファイル選択用のTkinterルートウィンドウ（非表示）
+def create_hidden_root():
+    root = Tk()
+    root.withdraw()  # ウィンドウを非表示にする
+    return root
+
+# 既存のBlenderレンダリング関数（blender_pathパラメータを削除し固定値を使用）
+def blender_render(blend_file, output_dir, frame_start, frame_end, res_x, res_y, samples, progress_callback=None):
     setpy = os.path.join(output_dir, "_tmp_set_render.py")
     with open(setpy, "w") as f:
         f.write(f"""
@@ -28,7 +39,7 @@ scene.render.image_settings.color_mode = 'RGBA'
 scene.render.filepath = r'{output_dir}/render_'
 """)
     
-    cmd = f'"{blender_path}" -b "{blend_file}" -P "{setpy}" -a'
+    cmd = f'"{BLENDER_PATH}" -b "{blend_file}" -P "{setpy}" -a'
     try:
         if progress_callback:
             progress_callback("rendering", 0, "Blenderレンダリング開始...")
@@ -156,7 +167,7 @@ def pngs_to_video(input_pattern, output_file, framerate=30, codec="prores_ks", p
         progress_callback("encoding", 100, f"動画化完了: {output_file}")
 
 # ======= Webアプリケーション =======
-app = Flask(__name__, static_folder='dist', static_url_path='')
+app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), 'dist')), static_url_path='')
 CORS(app)
 
 # グローバル状態管理
@@ -200,40 +211,69 @@ def get_status():
     """現在のレンダリング状態を返す"""
     return jsonify(render_status)
 
-@app.route('/api/start-render', methods=['POST'])
-def start_render():
-    """レンダリングを開始"""
+# 新しいAPIエンドポイントを追加
+@app.route('/api/select-blend-file', methods=['POST'])
+def select_blend_file():
+    """Blendファイル選択ダイアログを表示"""
     try:
-        data = request.json
-        settings = data.get('settings', {})
+        logging.info("Blendファイル選択ダイアログを開始")
+        root = create_hidden_root()
+        if not root:
+            return jsonify({"success": False, "error": "Tkinterの初期化に失敗しました"}), 500
         
-        # 必須パラメータのチェック
-        required_fields = ['blenderPath', 'blendFile', 'outputDir']
-        for field in required_fields:
-            if not settings.get(field):
-                return jsonify({"error": f"{field} is required"}), 400
+        try:
+            file_path = filedialog.askopenfilename(
+                parent=root,
+                title="Blendファイルを選択",
+                filetypes=[("Blender Files", "*.blend"), ("All Files", "*.*")],
+                initialdir=os.path.expanduser("~")
+            )
+        finally:
+            root.destroy()
         
-        # レンダリングジョブを別スレッドで実行
-        job_id = f"job_{int(time.time())}"
-        render_status["job_id"] = job_id
-        
-        thread = threading.Thread(
-            target=run_render_pipeline,
-            args=(settings, job_id),
-            daemon=True
-        )
-        thread.start()
-        
-        return jsonify({"job_id": job_id, "status": "started"})
-        
+        if file_path:
+            logging.info(f"選択されたBlendファイル: {file_path}")
+            return jsonify({"success": True, "path": file_path})
+        else:
+            logging.info("Blendファイルの選択がキャンセルされました")
+            return jsonify({"success": False, "message": "ファイルが選択されませんでした"})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"Blendファイル選択エラー: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
 
+@app.route('/api/select-output-folder', methods=['POST'])
+def select_output_folder():
+    """出力フォルダ選択ダイアログを表示"""
+    try:
+        logging.info("出力フォルダ選択ダイアログを開始")
+        root = create_hidden_root()
+        if not root:
+            return jsonify({"success": False, "error": "Tkinterの初期化に失敗しました"}), 500
+        
+        try:
+            folder_path = filedialog.askdirectory(
+                parent=root,
+                title="出力フォルダを選択",
+                initialdir=os.path.expanduser("~")
+            )
+        finally:
+            root.destroy()
+        
+        if folder_path:
+            logging.info(f"選択された出力フォルダ: {folder_path}")
+            return jsonify({"success": True, "path": folder_path})
+        else:
+            logging.info("出力フォルダの選択がキャンセルされました")
+            return jsonify({"success": False, "message": "フォルダが選択されませんでした"})
+    except Exception as e:
+        logging.error(f"出力フォルダ選択エラー: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+# run_render_pipeline関数を更新（blender_pathパラメータを削除）
 def run_render_pipeline(settings, job_id):
     """レンダリングパイプラインを実行"""
     try:
-        # パラメータの取得
-        blender_path = settings['blenderPath']
+        # パラメータの取得（blenderPathを削除）
         blend_file = settings['blendFile']
         output_dir = settings['outputDir']
         frame_start = settings.get('frameStart', 1)
@@ -253,8 +293,8 @@ def run_render_pipeline(settings, job_id):
         upscaled_dir = os.path.join(output_dir, "upscaled")
         interpolated_dir = os.path.join(output_dir, "interpolated")
         
-        # 1. Blenderレンダリング
-        blender_render(blender_path, blend_file, output_dir, frame_start, frame_end, 
+        # 1. Blenderレンダリング（固定パスを使用）
+        blender_render(blend_file, output_dir, frame_start, frame_end, 
                       res_x, res_y, samples, progress_callback)
         
         # 2. ノイズ除去
@@ -301,6 +341,39 @@ def run_render_pipeline(settings, job_id):
             "message": f"エラー: {str(e)}"
         })
 
+@app.route('/api/start-render', methods=['POST'])
+def start_render():
+    """レンダリングを開始"""
+    try:
+        data = request.json
+        settings = data.get('settings', {})
+        
+        # 必須パラメータのチェック（blenderPathを削除）
+        required_fields = ['blendFile', 'outputDir']
+        for field in required_fields:
+            if not settings.get(field):
+                return jsonify({"error": f"{field} is required"}), 400
+        
+        # Blenderの存在確認
+        if not os.path.exists(BLENDER_PATH):
+            return jsonify({"error": f"Blender not found at: {BLENDER_PATH}"}), 400
+        
+        # レンダリングジョブを別スレッドで実行
+        job_id = f"job_{int(time.time())}"
+        render_status["job_id"] = job_id
+        
+        thread = threading.Thread(
+            target=run_render_pipeline,
+            args=(settings, job_id),
+            daemon=True
+        )
+        thread.start()
+        
+        return jsonify({"job_id": job_id, "status": "started"})
+        
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/cancel-render', methods=['POST'])
 def cancel_render():
     """レンダリングをキャンセル"""
@@ -326,11 +399,13 @@ def get_system_info():
         except:
             pass
         
+        blender_exists = os.path.exists(BLENDER_PATH)
         info = {
             "platform": platform.system(),
             "cpu_count": psutil.cpu_count(),
             "memory_gb": round(psutil.virtual_memory().total / (1024**3), 1),
-            "cuda_available": cuda_available
+            "cuda_available": cuda_available,
+            "blender_exists": blender_exists
         }
         return jsonify(info)
     except Exception as e:
@@ -340,39 +415,48 @@ def create_static_files():
     """静的ファイル（HTML、CSS、JS）を作成"""
     os.makedirs('dist', exist_ok=True)
     
-    # 簡単なHTMLファイルを作成
-    html_content = """
-<!DOCTYPE html>
+    # React.createElement を使った完全修正版
+    html_content = '''<!DOCTYPE html>
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blender Render Pipeline</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <style>
-        .gradient-bg {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        }
-        .card {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; margin: 0; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; color: #333; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .header { text-align: center; color: white; margin-bottom: 30px; }
+        .input-group { margin-bottom: 15px; }
+        .input-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .file-select { display: flex; gap: 10px; align-items: center; }
+        .file-select input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; background: #f9f9f9; }
+        .file-select button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        .file-select button:hover { background: #0056b3; }
+        .file-select button:disabled { background: #ccc; cursor: not-allowed; }
+        input, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .progress-bar { width: 100%; height: 20px; background: #f0f0f0; border-radius: 10px; overflow: hidden; margin: 10px 0; }
+        .progress-fill { height: 100%; background: #007bff; transition: width 0.3s ease; }
+        .btn-primary { background: #007bff; color: white; border: none; padding: 12px 24px; border-radius: 4px; cursor: pointer; font-size: 16px; width: 100%; margin-bottom: 10px; }
+        .btn-primary:hover { background: #0056b3; }
+        .btn-primary:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-danger { background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; width: 100%; }
+        .btn-danger:hover { background: #c82333; }
+        .status-info { background: #f8f9fa; padding: 15px; border-radius: 4px; margin: 10px 0; }
+        .preview-area { width: 100%; height: 200px; background: #f0f0f0; border: 2px dashed #ccc; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+        .system-info { font-size: 12px; color: rgba(255,255,255,0.8); margin-top: 10px; }
     </style>
 </head>
-<body class="gradient-bg min-h-screen">
+<body>
     <div id="root"></div>
     
-    <script type="text/babel">
-        const { useState, useEffect } = React;
-        
+    <script>
         function App() {
-            const [settings, setSettings] = useState({
-                blenderPath: '',
+            console.log("App component is rendering!"); // Debug log
+            const [settings, setSettings] = React.useState({
                 blendFile: '',
                 outputDir: '',
                 frameStart: 1,
@@ -380,302 +464,93 @@ def create_static_files():
                 resolutionX: 1920,
                 resolutionY: 1080,
                 samples: 128,
-                denoiseMethod: 'OIDN',
-                useCuda: true,
-                enableUpscale: false,
-                enableInterpolation: false,
-                codec: 'prores_ks',
-                framerate: 30
             });
             
-            const [status, setStatus] = useState({
-                step: 'idle',
-                progress: 0,
-                message: '準備完了'
-            });
+            const [status, setStatus] = React.useState({ step: 'idle', progress: 0, message: '準備完了' });
+            const [isRendering, setIsRendering] = React.useState(false);
+            const [systemInfo, setSystemInfo] = React.useState(null);
             
-            const [isRendering, setIsRendering] = useState(false);
-            
-            // ステータスを定期的に更新
-            useEffect(() => {
-                const interval = setInterval(async () => {
-                    try {
-                        const response = await fetch('/api/status');
-                        const data = await response.json();
+            React.useEffect(() => {
+                fetch('/api/system-info').then(r => r.json()).then(setSystemInfo).catch(console.error);
+                const interval = setInterval(() => {
+                    fetch('/api/status').then(r => r.json()).then(data => {
                         setStatus(data);
                         setIsRendering(data.step !== 'idle' && data.step !== 'complete' && data.step !== 'error');
-                    } catch (error) {
-                        console.error('Status update failed:', error);
-                    }
+                    }).catch(console.error);
                 }, 1000);
-                
                 return () => clearInterval(interval);
             }, []);
             
-            const handleStartRender = async () => {
+            const selectBlendFile = async () => {
                 try {
-                    const response = await fetch('/api/start-render', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ settings })
-                    });
-                    
-                    if (!response.ok) {
-                        const error = await response.json();
-                        alert('エラー: ' + error.error);
-                    }
-                } catch (error) {
-                    alert('レンダリング開始に失敗しました: ' + error.message);
-                }
+                    const response = await fetch('/api/select-blend-file', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                    const data = await response.json();
+                    if (data.success && data.path) setSettings({...settings, blendFile: data.path});
+                    else alert('ファイル選択エラー: ' + (data.message || data.error));
+                } catch (error) { alert('ファイル選択エラー: ' + error.message); }
             };
             
-            const getStepName = (step) => {
-                const steps = {
-                    'idle': '待機中',
-                    'rendering': 'レンダリング',
-                    'denoising': 'ノイズ除去',
-                    'upscaling': 'アップスケール',
-                    'interpolating': 'フレーム補間',
-                    'encoding': '動画化',
-                    'complete': '完了',
-                    'error': 'エラー'
-                };
-                return steps[step] || step;
+            const selectOutputFolder = async () => {
+                try {
+                    const response = await fetch('/api/select-output-folder', { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                    const data = await response.json();
+                    if (data.success && data.path) setSettings({...settings, outputDir: data.path});
+                    else alert('フォルダ選択エラー: ' + (data.message || data.error));
+                } catch (error) { alert('フォルダ選択エラー: ' + error.message); }
             };
             
-            return (
-                <div className="container mx-auto p-6 max-w-6xl">
-                    <div className="text-center mb-8">
-                        <h1 className="text-4xl font-bold text-white mb-2">
-                            Blender Render Pipeline
-                        </h1>
-                        <p className="text-white opacity-80">
-                            プロフェッショナル3Dレンダリング with AI強化
-                        </p>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* 設定パネル */}
-                        <div className="lg:col-span-2">
-                            <div className="card p-6 mb-6">
-                                <h2 className="text-xl font-bold mb-4">基本設定</h2>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Blender実行ファイル</label>
-                                        <input
-                                            type="text"
-                                            className="w-full p-2 border rounded-lg"
-                                            placeholder="C:/Program Files/Blender Foundation/Blender 4.0/blender.exe"
-                                            value={settings.blenderPath}
-                                            onChange={(e) => setSettings({...settings, blenderPath: e.target.value})}
-                                        />
-                                    </div>
-                                    
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Blendファイル</label>
-                                        <input
-                                            type="text"
-                                            className="w-full p-2 border rounded-lg"
-                                            placeholder="レンダリングするBlendファイルのパス"
-                                            value={settings.blendFile}
-                                            onChange={(e) => setSettings({...settings, blendFile: e.target.value})}
-                                        />
-                                    </div>
-                                    
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">出力ディレクトリ</label>
-                                        <input
-                                            type="text"
-                                            className="w-full p-2 border rounded-lg"
-                                            placeholder="レンダリング結果の保存先"
-                                            value={settings.outputDir}
-                                            onChange={(e) => setSettings({...settings, outputDir: e.target.value})}
-                                        />
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">開始フレーム</label>
-                                            <input
-                                                type="number"
-                                                className="w-full p-2 border rounded-lg"
-                                                value={settings.frameStart}
-                                                onChange={(e) => setSettings({...settings, frameStart: parseInt(e.target.value)})}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">終了フレーム</label>
-                                            <input
-                                                type="number"
-                                                className="w-full p-2 border rounded-lg"
-                                                value={settings.frameEnd}
-                                                onChange={(e) => setSettings({...settings, frameEnd: parseInt(e.target.value)})}
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">幅</label>
-                                            <input
-                                                type="number"
-                                                className="w-full p-2 border rounded-lg"
-                                                value={settings.resolutionX}
-                                                onChange={(e) => setSettings({...settings, resolutionX: parseInt(e.target.value)})}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium mb-1">高さ</label>
-                                            <input
-                                                type="number"
-                                                className="w-full p-2 border rounded-lg"
-                                                value={settings.resolutionY}
-                                                onChange={(e) => setSettings({...settings, resolutionY: parseInt(e.target.value)})}
-                                            />
-                                        </div>
-                                    </div>
-                                    
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">サンプル数</label>
-                                        <input
-                                            type="number"
-                                            className="w-full p-2 border rounded-lg"
-                                            value={settings.samples}
-                                            onChange={(e) => setSettings({...settings, samples: parseInt(e.target.value)})}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="card p-6">
-                                <h2 className="text-xl font-bold mb-4">AI強化設定</h2>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">ノイズ除去方式</label>
-                                        <select
-                                            className="w-full p-2 border rounded-lg"
-                                            value={settings.denoiseMethod}
-                                            onChange={(e) => setSettings({...settings, denoiseMethod: e.target.value})}
-                                        >
-                                            <option value="OIDN">Intel Open Image Denoise</option>
-                                            <option value="FastDVDnet">FastDVDnet</option>
-                                        </select>
-                                    </div>
-                                    
-                                    <div className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            id="cuda"
-                                            checked={settings.useCuda}
-                                            onChange={(e) => setSettings({...settings, useCuda: e.target.checked})}
-                                        />
-                                        <label htmlFor="cuda" className="text-sm font-medium">CUDA加速を使用</label>
-                                    </div>
-                                    
-                                    <div className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            id="upscale"
-                                            checked={settings.enableUpscale}
-                                            onChange={(e) => setSettings({...settings, enableUpscale: e.target.checked})}
-                                        />
-                                        <label htmlFor="upscale" className="text-sm font-medium">AIアップスケール</label>
-                                    </div>
-                                    
-                                    <div className="flex items-center space-x-2">
-                                        <input
-                                            type="checkbox"
-                                            id="interpolation"
-                                            checked={settings.enableInterpolation}
-                                            onChange={(e) => setSettings({...settings, enableInterpolation: e.target.checked})}
-                                        />
-                                        <label htmlFor="interpolation" className="text-sm font-medium">フレーム補間</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        {/* ステータスパネル */}
-                        <div className="space-y-6">
-                            <div className="card p-6">
-                                <h2 className="text-xl font-bold mb-4">レンダリング状態</h2>
-                                
-                                <div className="space-y-4">
-                                    <div>
-                                        <div className="flex justify-between text-sm mb-1">
-                                            <span>現在のステップ:</span>
-                                            <span className="font-medium">{getStepName(status.step)}</span>
-                                        </div>
-                                        
-                                        <div className="flex justify-between text-sm mb-2">
-                                            <span>進捗:</span>
-                                            <span>{Math.round(status.progress)}%</span>
-                                        </div>
-                                        
-                                        <div className="w-full bg-gray-200 rounded-full h-2">
-                                            <div 
-                                                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                                                style={{width: `${status.progress}%`}}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="text-sm text-gray-600">
-                                        {status.message}
-                                    </div>
-                                    
-                                    <button
-                                        onClick={handleStartRender}
-                                        disabled={isRendering}
-                                        className={`w-full py-3 px-4 rounded-lg font-medium ${
-                                            isRendering 
-                                                ? 'bg-gray-400 cursor-not-allowed' 
-                                                : 'bg-blue-600 hover:bg-blue-700 text-white'
-                                        }`}
-                                    >
-                                        {isRendering ? 'レンダリング中...' : 'レンダリング開始'}
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div className="card p-6">
-                                <h2 className="text-xl font-bold mb-4">プレビュー</h2>
-                                <div className="aspect-video bg-gray-100 rounded-lg flex items-center justify-center">
-                                    {status.preview_image ? (
-                                        <img 
-                                            src={status.preview_image || "/placeholder.svg"} 
-                                            alt="Preview" 
-                                            className="max-w-full max-h-full rounded-lg"
-                                        />
-                                    ) : (
-                                        <div className="text-gray-500 text-center">
-                                            <div className="text-4xl mb-2">🎬</div>
-                                            <p>プレビューはここに表示されます</p>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            const startRender = async () => {
+                if (!settings.blendFile || !settings.outputDir) { alert('Blendファイルと出力フォルダを選択してください'); return; }
+                try {
+                    const response = await fetch('/api/start-render', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ settings }) });
+                    if (!response.ok) { const error = await response.json(); alert('エラー: ' + error.error); }
+                } catch (error) { alert('レンダリング開始エラー: ' + error.message); }
+            };
+            
+            const getStepName = (step) => ({ 'idle': '待機中', 'rendering': 'レンダリング', 'denoising': 'ノイズ除去', 'upscaling': 'アップスケール', 'interpolating': 'フレーム補間', 'encoding': '動画化', 'complete': '完了', 'error': 'エラー' }[step] || step);
+            
+            return React.createElement('div', { className: 'container' },
+                React.createElement('div', { className: 'header' },
+                    React.createElement('h1', null, 'Blender Render Pipeline'),
+                    React.createElement('p', null, 'プロフェッショナル3Dレンダリング'),
+                    systemInfo && React.createElement('div', { className: 'system-info' }, systemInfo.platform + ' | CPU: ' + systemInfo.cpu_count + 'コア | RAM: ' + systemInfo.memory_gb + 'GB | CUDA: ' + (systemInfo.cuda_available ? '利用可能' : '利用不可') + ' | Blender: ' + (systemInfo.blender_exists ? '検出' : '未検出'))
+                ),
+                React.createElement('div', { className: 'card' },
+                    React.createElement('h2', null, 'ファイル選択'),
+                    React.createElement('div', { className: 'input-group' }, React.createElement('label', null, 'Blendファイル'), React.createElement('div', { className: 'file-select' }, React.createElement('input', { type: 'text', value: settings.blendFile, readOnly: true, placeholder: 'Blendファイルを選択' }), React.createElement('button', { onClick: selectBlendFile, disabled: isRendering }, '選択'))),
+                    React.createElement('div', { className: 'input-group' }, React.createElement('label', null, '出力フォルダ'), React.createElement('div', { className: 'file-select' }, React.createElement('input', { type: 'text', value: settings.outputDir, readOnly: true, placeholder: '出力フォルダを選択' }), React.createElement('button', { onClick: selectOutputFolder, disabled: isRendering }, '選択')))
+                ),
+                React.createElement('div', { className: 'card' },
+                    React.createElement('h2', null, 'レンダリング設定'),
+                    React.createElement('div', { className: 'grid' },
+                        React.createElement('div', { className: 'input-group' }, React.createElement('label', null, '開始フレーム'), React.createElement('input', { type: 'number', value: settings.frameStart, onChange: e => setSettings({...settings, frameStart: parseInt(e.target.value) || 1}), disabled: isRendering })),
+                        React.createElement('div', { className: 'input-group' }, React.createElement('label', null, '終了フレーム'), React.createElement('input', { type: 'number', value: settings.frameEnd, onChange: e => setSettings({...settings, frameEnd: parseInt(e.target.value) || 250}), disabled: isRendering }))
+                    ),
+                    React.createElement('div', { className: 'grid' },
+                        React.createElement('div', { className: 'input-group' }, React.createElement('label', null, '幅'), React.createElement('input', { type: 'number', value: settings.resolutionX, onChange: e => setSettings({...settings, resolutionX: parseInt(e.target.value) || 1920}), disabled: isRendering })),
+                        React.createElement('div', { className: 'input-group' }, React.createElement('label', null, '高さ'), React.createElement('input', { type: 'number', value: settings.resolutionY, onChange: e => setSettings({...settings, resolutionY: parseInt(e.target.value) || 1080}), disabled: isRendering }))
+                    ),
+                    React.createElement('div', { className: 'input-group' }, React.createElement('label', null, 'サンプル数'), React.createElement('input', { type: 'number', value: settings.samples, onChange: e => setSettings({...settings, samples: parseInt(e.target.value) || 128}), disabled: isRendering }))
+                ),
+                React.createElement('div', { className: 'card' },
+                    React.createElement('h2', null, 'レンダリング実行'),
+                    React.createElement('div', { className: 'status-info' }, 'ステップ: ' + getStepName(status.step) + ' | 進捗: ' + Math.round(status.progress) + '% | 状況: ' + status.message),
+                    React.createElement('div', { className: 'progress-bar' }, React.createElement('div', { className: 'progress-fill', style: { width: status.progress + '%' } })),
+                    React.createElement('button', { className: 'btn-primary', onClick: startRender, disabled: isRendering || !settings.blendFile || !settings.outputDir }, isRendering ? 'レンダリング中...' : 'レンダリング開始'),
+                    isRendering && React.createElement('button', { className: 'btn-danger', onClick: () => fetch('/api/cancel-render', { method: 'POST' }) }, 'キャンセル'),
+                    React.createElement('div', { className: 'preview-area' }, status.preview_image ? React.createElement('img', { src: status.preview_image, alt: 'Preview', style: { maxWidth: '100%', maxHeight: '100%' } }) : React.createElement('div', null, 'プレビューはここに表示されます'))
+                )
             );
         }
         
-        ReactDOM.render(<App />, document.getElementById('root'));
+        ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
     </script>
 </body>
-</html>
-    """
+</html>'''
     
-    with open('dist/index.html', 'w', encoding='utf-8') as f:
-        f.write(html_content)
 
 def main():
-    """メイン関数：Webサーバーを起動してブラウザを開く"""
+    """メイン関数: Webサーバーを起動してブラウザを開く"""
     print("🚀 Blender Render Pipeline を起動中...")
     
     # 静的ファイルを作成
@@ -683,7 +558,7 @@ def main():
     
     # Webサーバーを別スレッドで起動
     server_thread = threading.Thread(
-        target=lambda: app.run(host='127.0.0.1', port=5000, debug=False, use_reloader=False),
+        target=lambda: app.run(host='127.0.0.1', port=5000, debug=True, use_reloader=False),
         daemon=True
     )
     server_thread.start()
